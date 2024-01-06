@@ -1,0 +1,20 @@
+{
+  "name": "js-missing-deps-analyzer",
+  "version": "0.1.0",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "dependencies": {
+    "esprima": "~4.0.1"
+  },
+  "devDependencies": {
+    "@types/esprima": "~4.0.3",
+    "@types/node": "^20.5.9",
+    "@types/jest": "~29.5.4",
+    "@types/estree": "^1.0.1",
+    "jest": "~29.5.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "~5.2.2"
+  }
+}
