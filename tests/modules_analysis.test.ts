@@ -1,47 +1,77 @@
 import { getImportedModules } from "../src/modules_analysis"
 import { ImportStyle } from "../src/modules_analysis"
-import * as fs from "fs"
-import * as path from "path"
-
 
 const table = [
+    // ES modules
     {
-        name: "Test ES modules detection",
-        file: "modules/es_modules.js",
-        expectedModules: [
-            "DefaultImport",
-            "NamespaceImport",
-            "NamedImportSingle",
-            "NamedImportAlias",
-            "DefaultImportAlias",
-            "NamedImportMultiple",
-            "NamedImportMultipleWithAlias",
-            "NamedAndDefaultImport",
-            "DefaultAndNamespaceImport",
-            "WholeModuleImport"
-        ],
+        testName: "Default import",
+        code: 'import defaultExport from "module-name";',
         style: ImportStyle.ES
     },
     {
-        name: "Test commonJS modules detection",
-        file: "modules/common_js.js",
-        expectedModules: [
-            "requireModule",
-            "requireModuleInsideFunction",
-            "requireModuleInObject"
-        ],
+        testName: "Namespace import",
+        code : 'import * as name from "module-name";',
+        style: ImportStyle.ES
+    },
+    {
+        testName: "Named import",
+        code : 'import { export1 } from "module-name";',
+        style: ImportStyle.ES
+    },
+    {
+        testName: "Named aliased import",
+        code : 'import { export1 as alias1 } from "module-name";',
+        style: ImportStyle.ES
+    },
+    {
+        testName: "Default aliased import",
+        code : 'import { default as alias } from "module-name";',
+        style: ImportStyle.ES
+    },
+    {
+        testName: "Multiple named imports",
+        code : 'import { export1, export2 } from "module-name";',
+        style: ImportStyle.ES
+    },
+    {
+        testName: "Named import and named aliad import",
+        code : 'import { export1, export2 as alias2 } from "module-name";',
+        style: ImportStyle.ES
+    },
+    {
+        testName : "Default and named imports",
+        code : 'import defaultExport, { export1 } from "module-name";',
+        style: ImportStyle.ES
+    },
+    {
+        testName : "Default and namespace imports",
+        code : 'import defaultExport, * as name from "module-name";',
+        style: ImportStyle.ES
+    },
+    {
+        testName : "Side effect import",
+        code : 'import "module-name";',
+        style: ImportStyle.ES
+    },
+    // Common JS
+    {
+        testName: "Global var import",
+        code : 'const module = require("module-name")',
+        style: ImportStyle.COMMON_JS
+    },
+    {
+        testName: "Import inside function",
+        code : `
+            function dummyFunction() {
+                const module = require("module-name")
+            }
+        `,
         style: ImportStyle.COMMON_JS
     }
 ]
 
-test.each(table)('$name', ({file, expectedModules, style}) => {
-    const content = fs.readFileSync(path.resolve(__dirname, file), "utf8")
-    const actualModules = getImportedModules(content)
-    
-    //expect(actualModules.length).toBe(expectedModules.length)
-    for (const module of expectedModules) {
-        const foundModule = actualModules.find(im => im.name == module)
-        expect(foundModule?.name).toBe(module)
-        expect(foundModule?.style).toBe(style)
-    }
+test.each(table)('$style: $testName', ({testName, code, style}) => {
+    const actualModule = getImportedModules(code)[0]
+    expect(actualModule?.name).toBe("module-name")
+    expect(actualModule?.style).toBe(style)
 })

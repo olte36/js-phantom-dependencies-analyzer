@@ -27,9 +27,9 @@ const STATEMENTS: string[] = [
 ]
 
 export enum ImportStyle {
-    ES,
-    COMMON_JS,
-    UNPROCESSABLE
+    ES = "ES",
+    COMMON_JS = "Common JS",
+    UNPROCESSABLE = "Unprocessable"
 }
 
 export interface ImportedModule {
