@@ -1,30 +1,7 @@
-import {parseModule, Syntax} from "esprima"
-import {Statement, CallExpression, Expression, BaseNode, Declaration} from "estree"
+import * as acorn from "acorn"
+import * as acornWalk from "acorn-walk"
 
 const COMMON_JS_REQUIRE = "require"
-const STATEMENTS: string[] = [
-    Syntax.BlockStatement,
-    Syntax.BreakStatement,
-    Syntax.ContinueStatement,
-    Syntax.DebuggerStatement,
-    Syntax.DoWhileStatement,
-    Syntax.EmptyStatement,
-    Syntax.ExpressionStatement,
-    Syntax.ForInStatement,
-    Syntax.ForOfStatement,
-    Syntax.ForStatement,
-    Syntax.IfStatement,
-    Syntax.LabeledStatement,
-    Syntax.ReturnStatement,
-    Syntax.SwitchStatement,
-    Syntax.ThrowStatement,
-    Syntax.TryStatement,
-    Syntax.WhileStatement,
-    Syntax.WithStatement,
-    Syntax.VariableDeclaration,
-    Syntax.FunctionDeclaration,
-    Syntax.ClassDeclaration,
-]
 
 export enum ImportStyle {
     ES = "ES",
@@ -41,36 +18,45 @@ export interface ImportedModule {
 
 export function getImportedModules(content: string): ImportedModule[] {
     let result: ImportedModule[] = []
-    const program = parseModule(content, { loc: true })
-
-    program.body.forEach(part => {
-        if (part.type == Syntax.ImportDeclaration) {
-            result.push({
-                name: part.source.value as string,
-                style: ImportStyle.ES,
-                row: part.source.loc?.start.line as number,
-                col: part.source.loc?.start.column as number
-            })
-            
-        } else if (isStatement(part)) {
-            result = result.concat(processStatement(part as Statement))
-        } 
+    const program = acorn.parse(content, {
+        ecmaVersion: "latest", 
+        sourceType: "module",
+        locations: true 
     })
-    //programm.body.filter(m => m.type == "ImportDeclaration")
+
+    acornWalk.simple(program, {
+        ImportDeclaration(node) {
+            result.push({
+                name: node.source.value as string,
+                style: ImportStyle.ES,
+                row: node.source.loc?.start.line as number,
+                col: node.source.loc?.start.column as number
+            })
+        },
+        ImportExpression(node) {
+            result.push(getEsDynamicImport(node))
+        },
+        CallExpression(node) {
+            const module = getCommonsJsImportFromLiteral(node)
+            if (module != null) {
+                result.push(module)
+            }
+        }
+    })
     
     //console.log(JSON.stringify(program, undefined, "  "))
     return result
 }
 
-function getCommonsJsImportFromLiteral(callExpression: CallExpression): ImportedModule | null {
+function getCommonsJsImportFromLiteral(callExpression: acorn.CallExpression): ImportedModule | null {
     const callee = callExpression.callee
     const args = callExpression.arguments
-    if (callee.type == Syntax.Identifier
+    if (callee.type == "Identifier"
         && callee.name == COMMON_JS_REQUIRE
         && args.length == 1) {
         const row = args[0].loc?.start.line as number
         const col = args[0].loc?.start.column as number   
-        if (args[0].type == Syntax.Literal) {
+        if (args[0].type == "Literal") {
             return {
                 name: args[0].value as string,
                 style: ImportStyle.COMMON_JS,
@@ -88,61 +74,21 @@ function getCommonsJsImportFromLiteral(callExpression: CallExpression): Imported
     return null
 }
 
-function processStatement(statement: Statement): ImportedModule[] {
-    switch (statement.type) {
-        case Syntax.VariableDeclaration:
-            return statement.declarations
-                .filter(vd => vd.init)
-                .map(vd => processExpression(vd.init as Expression))
-                .filter(m => m !== null)
-                .map(m => m as ImportedModule)
-
-        case Syntax.BlockStatement:
-            return statement.body.flatMap(s => processStatement(s))
-        
-        case Syntax.WithStatement:
-        case Syntax.WhileStatement:
-        case Syntax.DoWhileStatement:
-        case Syntax.ForInStatement:
-        case Syntax.ForOfStatement:
-        case Syntax.ForStatement:
-        case Syntax.FunctionDeclaration:
-            return processStatement(statement.body)
-
-        case Syntax.ClassDeclaration:
-        // TODO    
-            return []   
-        
-        case Syntax.ReturnStatement:
-            if (statement.argument) {
-                const module = processExpression(statement.argument)
-                return module ? [module] : []
-            }
-            return []
-        
-        case Syntax.IfStatement:
-            const consequentModules = processStatement(statement.consequent)
-            const alternateModules = statement.alternate ? processStatement(statement.alternate) : []
-            return consequentModules.concat(alternateModules)
-
-        case Syntax.TryStatement:
-            const blockModules = processStatement(statement.block)    
-            const handlerModules = statement.handler ? processStatement(statement.handler.body) : []
-            const finalizerModules = statement.finalizer ? processStatement(statement.finalizer) : []
-            return blockModules.concat(handlerModules, finalizerModules)
-
-        default:
-            return []
+function getEsDynamicImport(importExpression: acorn.ImportExpression): ImportedModule {
+    const source = importExpression.source
+    const row = source.loc!.start.line
+    const col = source.loc!.start.column
+    if (source.type == "Literal") {
+        return {
+            name: source.value as string,
+            style: ImportStyle.ES,
+            row: row,
+            col: col
+        }
     }
-}
-
-function processExpression(expression: Expression): ImportedModule | null {
-    if (expression.type === Syntax.CallExpression) {
-        return getCommonsJsImportFromLiteral(expression)
+    return {
+        style: ImportStyle.UNPROCESSABLE,
+        row: row,
+        col: col
     }
-    return null
-}
-
-function isStatement(node: BaseNode) {
-    return STATEMENTS.includes(node.type)
 }

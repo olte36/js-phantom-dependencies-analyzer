@@ -53,6 +53,11 @@ const table = [
         code : 'import "module-name";',
         style: ImportStyle.ES
     },
+    {
+        testName: "Dynamic import",
+        code: `const module = await import('module-name');`,
+        style: ImportStyle.ES
+    },
     // Common JS
     {
         testName: "Global var import",
