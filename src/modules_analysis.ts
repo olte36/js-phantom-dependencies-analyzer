@@ -1,7 +1,11 @@
 import * as acorn from "acorn"
+import * as acornLoose from "acorn-loose"
 import * as acornWalk from "acorn-walk"
 import fs from "node:fs"
 import path from "node:path"
+
+export const JS_AND_TS_REGEX = /(\.js$)|(\.cjs$)|(\.mjs$)|(\.jsx$)|((^.?|\.[^d]|[^.]d|[^.][^d])\.ts$)|(\.tsx$)/
+export const JS_REGEX = /(\.js$)|(\.cjs$)|(\.mjs$)|(\.jsx$)/
 
 const COMMON_JS_REQUIRE = "require"
 
@@ -32,10 +36,11 @@ export interface PackageJsonDeps {
 
 export function getImportedModules(content: string, fileName?: string): ImportedModule[] {
     let result: ImportedModule[] = []
-    const program = acorn.parse(content, {
+    const program = acornLoose.parse(content, {
         ecmaVersion: "latest", 
         sourceType: "module",
-        locations: true 
+        locations: true,
+        allowReserved: true
     })
 
     acornWalk.simple(program, {
@@ -74,21 +79,24 @@ export function getMissingModulesOfFile(content: string, packageJson: PackageJso
         ...packageJson.optionalDependencies,
     }
     const importedModules = getImportedModules(content)
-    const missingModules = importedModules.filter(module => {
-        for (const name in declaredDeps) {
-            // TODO: fix module check e.g. react and react-dom
-            if (module.name?.startsWith(name)) {
-                return false
+    const missingModules = importedModules
+        // filter relative imports
+        .filter(module => !module.name?.startsWith("./") && !module.name?.startsWith("../"))
+        .filter(module => {
+            for (const name in declaredDeps) {
+                // TODO: fix module check e.g. react and react-dom
+                if (module.name?.startsWith(name)) {
+                    return false
+                }
             }
-        }
-        return true
-    })
+            return true
+        })
     return missingModules
 }
 
 export function getMissingModulesOfPackage(
     packageDir: string, 
-    fileFilter: RegExp = /(\.js$)|(\.cjs$)|(\.mjs$)|(\.jsx$)|(\.ts$)|(\.tsx$)/
+    fileFilter: RegExp = JS_REGEX
 ) {
     if (!fs.existsSync(packageDir)) {
         throw new Error(`The path ${packageDir} does not exist`)
@@ -98,17 +106,26 @@ export function getMissingModulesOfPackage(
         throw new Error("The package must contain package.json")
     }
     const packageJson: PackageJsonDeps = JSON.parse(fs.readFileSync(packageJsonPath, { encoding: "utf8" }))
-    return fs.readdirSync(packageDir, { withFileTypes: true, recursive: true })
-        .filter(f => f.isFile())
-        .filter(f => fileFilter.test(f.name))
+    const dirContent = fs.readdirSync(packageDir, { withFileTypes: false, recursive: true, encoding: "utf8" })
+    return dirContent
+        .map(f => path.join(packageDir, f))        
+        .filter(f => fs.lstatSync(f).isFile())
+        .filter(f => fileFilter.test(f))
         .flatMap(f => {
-            const filePath = path.join(f.path, f.name)
+            const filePath = f
             const content = fs.readFileSync(filePath, { encoding: "utf8" })
-            return getMissingModulesOfFile(content, packageJson)
-                .map(m => {
-                    m.fileName = filePath
-                    return m
-                })
+            try {
+                return getMissingModulesOfFile(content, packageJson)
+                    .map(m => {
+                        m.fileName = filePath
+                        return m
+                    })
+            } catch (e) {
+                if (e instanceof Error) {
+                    throw new Error(`Error during processing file ${filePath}: ${e.message}`)
+                }
+                throw new Error(`Error during processing file ${filePath}: ${e}`)
+            }
         })
 }
 

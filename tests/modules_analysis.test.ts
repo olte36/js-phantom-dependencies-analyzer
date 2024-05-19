@@ -1,7 +1,7 @@
-import { getImportedModules } from "../src/modules_analysis"
+import { getImportedModules, getMissingModulesOfFile } from "../src/modules_analysis"
 import { ImportStyle } from "../src/modules_analysis"
 
-const table = [
+const absoluteImports = [
     // ES modules
     {
         testName: "Default import",
@@ -75,8 +75,41 @@ const table = [
     }
 ]
 
-test.each(table)('$style: $testName', ({testName, code, style}) => {
+test.each(absoluteImports)('$style: $testName', ({code, style}) => {
     const actualModule = getImportedModules(code)[0]
     expect(actualModule?.name).toBe("module-name")
     expect(actualModule?.style).toBe(style)
+})
+
+
+const relativeImports = [
+    {
+        testName: "Relative import in current dir",
+        code: `import component from './component.js';`,
+        style: ImportStyle.ES
+    },
+    {
+        testName: "Relative import in parrent dirs",
+        code : `import component from '../../component.js';`,
+        style: ImportStyle.ES
+    },
+    {
+        testName: "Relative global var import",
+        code : 'const module = require("../component.js")',
+        style: ImportStyle.COMMON_JS
+    },
+    {
+        testName: "Relative import inside function",
+        code : `
+            function dummyFunction() {
+                const module = require("./component.js")
+            }
+        `,
+        style: ImportStyle.COMMON_JS
+    }
+]
+
+test.each(relativeImports)('$style: $testName', ({code}) => {
+    const actualModules = getMissingModulesOfFile(code, {})
+    expect(actualModules.length).toBe(0)
 })

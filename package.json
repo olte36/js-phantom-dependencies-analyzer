@@ -4,10 +4,12 @@
   "scripts": {
     "dev": "tsc --sourcemap && node dist/index.js",
     "build": "tsc",
-    "test": "jest"
+    "test": "jest",
+    "dev:debug": "pnpm dev -r react-app-rewire-alias"
   },
   "dependencies": {
     "acorn": "^8.11.3",
+    "acorn-loose": "^8.4.0",
     "acorn-walk": "^8.3.2",
     "yargs": "^17.7.2",
     "npm-registry-fetch": "^16.1.0",
